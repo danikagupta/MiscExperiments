@@ -3,11 +3,11 @@
 
 import os
 import json
-import PyPDF2
+#import PyPDF2
 import random
 import streamlit as st
-from src.graph import salesCompAgent
-from src.google_firestore_integration import get_all_prompts
+#from src.graph import salesCompAgent
+#from src.google_firestore_integration import get_all_prompts
 from google.oauth2 import service_account
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, BaseMessage
 from datetime import datetime
@@ -17,7 +17,7 @@ os.environ["LANGCHAIN_TRACING_V2"]="true"
 os.environ["LANGCHAIN_API_KEY"]=st.secrets['LANGCHAIN_API_KEY']
 os.environ["LANGCHAIN_PROJECT"]="SalesCompAgent"
 os.environ['LANGCHAIN_ENDPOINT']="https://api.smith.langchain.com"
-os.environ['SENDGRID_API_KEY']=st.secrets['SENDGRID_API_KEY']
+#os.environ['SENDGRID_API_KEY']=st.secrets['SENDGRID_API_KEY']
 
 DEBUGGING=0
 
@@ -358,17 +358,7 @@ def render_cl3vr_header():
 
 def render_cl3vr_welcome():
     """Render the welcome section for first-time visitors"""
-    st.markdown("""
-    <div class="cl3vr-welcome">
-        <div class="cl3vr-welcome-logo">🤖</div>
-        <h1 class="cl3vr-welcome-title">Meet cl3vr</h1>
-        <p class="cl3vr-welcome-subtitle">Your AI assistant for Sales Compensation</p>
-        <p class="cl3vr-welcome-description">
-            Get instant answers to your sales compensation questions, analyze data, and streamline your compensation
-            workflows with AI-powered assistance.
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
+    st.write("Welcome section works!")
 
 def render_cl3vr_message(content, role="assistant", attachment=None):
     """Render a chat message in the cl3vr style
@@ -378,6 +368,8 @@ def render_cl3vr_message(content, role="assistant", attachment=None):
         role (str): Either "assistant" or "user"
         attachment (dict, optional): File attachment info with keys: name, size
     """
+    # Temporary debug: print the raw content to find HTML tags
+    print(f"\nMessage content for {role}:\n{content}\n")
     if role == "user":
         avatar = "👤"
         message_class = "cl3vr-user-message"
@@ -405,7 +397,6 @@ def render_cl3vr_message(content, role="assistant", attachment=None):
             <div class="cl3vr-message-content">
                 <div class="cl3vr-message-sender">{sender}</div>
                 <div class="cl3vr-message-text">{content}</div>
-                {attachment_html}
             </div>
         </div>
     </div>
@@ -471,13 +462,19 @@ def get_google_cloud_credentials():
     Returns:
         service_account.Credentials: Google Cloud credentials object
     """
-    # Get Google Cloud credentials from Streamlit secrets
-    js1 = st.secrets["GOOGLE_KEY"]
-    #print(" A-plus Google credentials JS: ", js1)
-    credentials_dict=json.loads(js1)
-    credentials = service_account.Credentials.from_service_account_info(credentials_dict)   
-    st.session_state.credentials = credentials
-    return credentials
+    try:
+        js1 = st.secrets["GOOGLE_KEY"]
+        # Display the first 100 chars for debugging
+        #st.info(f"GOOGLE_KEY (first 100 chars): {js1[:100]}")
+        credentials_dict = json.loads(js1)
+        credentials = service_account.Credentials.from_service_account_info(credentials_dict)
+        st.session_state.credentials = credentials
+        #print(f"Credentials set in session state as {credentials}")
+        return credentials
+    except Exception as e:
+        st.error(f"Error parsing GOOGLE_KEY or creating credentials: {e}")
+        st.stop()  # Stop the app to make the error visible
+        return None
 
 def initialize_prompts():
     """
@@ -602,6 +599,16 @@ def start_chat(container=st):
                 # Add assistant messages as AIMessage
                 message_history.append(AIMessage(content=m["content"]))
         
+        # FAKE CODE HERE FOR IMMEDIATE RESPONSE
+        # TO-DO TO-DO TO-DO XXX XXX XXX XXX
+        if st.secrets['OPENAI_API_KEY'].startswith("sk-proj-"):
+            print("Matched st. secrets key")
+            resp = "Here is a fake response"
+            with st.chat_message("assistant", avatar=avatars["assistant"]):
+                st.write(resp)
+            st.session_state.messages.append({"role": "assistant", "content": resp})
+            return
+
         # Initialize salesCompAgent in graph.py 
         app = salesCompAgent(st.secrets['OPENAI_API_KEY'])
         thread={"configurable":{"thread_id":thread_id}}
@@ -722,6 +729,7 @@ if "thread_id" not in st.session_state:
 # You might want to move this near the top if needed earlier
 if "credentials" not in st.session_state:
     st.session_state.credentials = get_google_cloud_credentials()
+
 # if "prompts" not in st.session_state: # Assuming prompts are not needed for this flow yet
 #     prompts = get_all_prompts(st.session_state.credentials)
 #     st.session_state.prompts = prompts
@@ -729,64 +737,67 @@ if "credentials" not in st.session_state:
 # Render the cl3vr header
 render_cl3vr_header()
 
+
 # Main container
-st.markdown('<div class="cl3vr-container">', unsafe_allow_html=True)
-st.markdown('<div class="cl3vr-main">', unsafe_allow_html=True)
+#st.markdown('**Test container**')
+
+
+
 
 # Welcome section or chat messages
 # Removed the welcome section logic as has_interacted is now True by default
 # if not st.session_state.has_interacted:
 render_cl3vr_welcome()
+
 # else:
 
+
 # Always render the chat container now
-st.markdown('<div class="cl3vr-chat-container" id="chat-container">', unsafe_allow_html=True)
+
 
 # Display all messages using the custom renderer
-for message in st.session_state.messages:
-    render_cl3vr_message(
-        content=message['content'],
-        role=message['role'],
-        attachment=message.get('attachment')
+with st.container():
+    for message in st.session_state.messages:
+        render_cl3vr_message(
+            content=message['content'],
+            role=message['role'],
+            attachment=message.get('attachment')
+        )
+    # Placeholder for the loading indicator
+    loading_placeholder = st.empty()
+
+# Input area (using a container for layout robustness)
+with st.container():
+    # File upload handling
+    uploaded_file = st.file_uploader(
+        "Upload a file",
+        type=["pdf", "csv", "txt"], # Adjusted types based on process_file
+        label_visibility="collapsed",
+        key="file_uploader" # Added a key for better state management
     )
 
-# Placeholder for the loading indicator
-loading_placeholder = st.empty()
-
-st.markdown('</div>', unsafe_allow_html=True)
-
-
-# Input area
-st.markdown('<div class="cl3vr-input-container">', unsafe_allow_html=True)
-
-# File upload handling
-uploaded_file = st.file_uploader(
-    "Upload a file",
-    type=["pdf", "csv", "txt"], # Adjusted types based on process_file
-    label_visibility="collapsed",
-    key="file_uploader" # Added a key for better state management
-)
-
-# Process and store file content when a new file is uploaded
-if uploaded_file and uploaded_file != st.session_state.get('uploaded_file_instance'):
-    st.session_state.uploaded_file_instance = uploaded_file # Store the instance for comparison
-    st.session_state.uploaded_file = {
-        "name": uploaded_file.name,
-        "size": round(uploaded_file.size / 1024)
-    }
-    # Process the file immediately and store its content
-    # Use a copy of the file object for processing if needed multiple times
-    file_content, file_type = process_file(uploaded_file)
-    st.session_state.uploaded_file_content = file_content
-    st.session_state.uploaded_file_type = file_type
-    # Display file preview right after upload
-    render_cl3vr_file_preview(st.session_state.uploaded_file["name"], st.session_state.uploaded_file["size"])
-    # Rerun to show the preview immediately and clear the uploader state visually
-    # st.rerun() # Optional: uncomment if preview doesn't show instantly
-
-# Display file preview if a file exists in session state but hasn't been processed by send button yet
-elif st.session_state.uploaded_file and not uploaded_file:
-     render_cl3vr_file_preview(st.session_state.uploaded_file["name"], st.session_state.uploaded_file["size"])
+    # Process and store file content when a new file is uploaded
+    if uploaded_file and uploaded_file != st.session_state.get('uploaded_file_instance'):
+        st.session_state.uploaded_file_instance = uploaded_file # Store the instance for comparison
+        st.session_state.uploaded_file = {
+            "name": uploaded_file.name,
+            "size": round(uploaded_file.size / 1024)
+        }
+        # Process the file immediately and store its content
+        # Use a copy of the file object for processing if needed multiple times
+        file_content, file_type = process_file(uploaded_file)
+        st.session_state.uploaded_file_content = file_content
+        st.session_state.uploaded_file_type = file_type
+        # Display file preview right after upload
+        render_cl3vr_file_preview(st.session_state.uploaded_file["name"], st.session_state.uploaded_file["size"])
+        # Rerun to show the preview immediately and clear the uploader state visually
+        # st.rerun() # Optional: uncomment if preview doesn't show instantly
+    # Display file preview if a file exists in session state but hasn't been processed by send button yet
+    elif st.session_state.get('uploaded_file') and not uploaded_file:
+        render_cl3vr_file_preview(
+            st.session_state.uploaded_file["name"],
+            st.session_state.uploaded_file["size"]
+        )
 
 
 # Input form using columns
@@ -830,19 +841,18 @@ if send_button and (user_input.strip() or st.session_state.uploaded_file):
     # --- Display User Message ---
     # Rerender the whole chat history including the new user message
     # This replaces the previous loop and clears the loading placeholder
-    st.markdown('<div class="cl3vr-chat-container" id="chat-container-rerender">', unsafe_allow_html=True)
-    for message in st.session_state.messages:
-        render_cl3vr_message(
-            content=message['content'],
-            role=message['role'],
-            attachment=message.get('attachment')
-        )
-    st.markdown('</div>', unsafe_allow_html=True)
-
+    with st.container():
+        # Chat container styling is handled via CSS. Just render messages in a Streamlit container.
+        for message in st.session_state.messages:
+            render_cl3vr_message(
+                content=message['content'],
+                role=message['role'],
+                attachment=message.get('attachment')
+            )
 
     # --- Show Loading Indicator ---
     with loading_placeholder.container():
-         render_cl3vr_loading()
+        render_cl3vr_loading()
 
     # --- Prepare for AI Call ---
     message_history = []
@@ -868,35 +878,45 @@ if send_button and (user_input.strip() or st.session_state.uploaded_file):
         # Optionally keep it in session state if needed across turns without re-upload
         # st.session_state['csv_data'] = st.session_state.uploaded_file_content
 
-    # --- Call AI Agent ---
-    app = salesCompAgent(st.secrets['OPENAI_API_KEY'])
-    ai_response_content = ""
-    try:
-        # Stream responses from the agent
-        for s in app.graph.stream(parameters, thread):
-            if DEBUGGING:
-                print(f"GRAPH RUN: {s}")
-                # st.write(s) # Avoid writing debug directly to main UI if possible
-            for k, v in s.items():
+    # FAKE CODE HERE FOR IMMEDIATE RESPONSE
+    # TO-DO TO-DO TO-DO XXX XXX XXX XXX
+    if st.secrets['OPENAI_API_KEY'].startswith("sk-proj-"):
+        print("Matched st. secrets key")
+        resp = "Here is a fake response"
+        #with st.chat_message("assistant", avatar=avatars["assistant"]):
+        #    st.write(resp)
+        st.session_state.messages.append({"role": "assistant", "content": resp})
+    else:
+
+        # --- Call AI Agent ---
+        app = salesCompAgent(st.secrets['OPENAI_API_KEY'])
+        ai_response_content = ""
+        try:
+            # Stream responses from the agent
+            for s in app.graph.stream(parameters, thread):
                 if DEBUGGING:
-                    print(f"Key: {k}, Value: {v}")
-                if resp := v.get("responseToUser"):
-                    ai_response_content += resp # Accumulate response parts if streamed
+                    print(f"GRAPH RUN: {s}")
+                    # st.write(s) # Avoid writing debug directly to main UI if possible
+                for k, v in s.items():
+                    if DEBUGGING:
+                        print(f"Key: {k}, Value: {v}")
+                    if resp := v.get("responseToUser"):
+                        ai_response_content += resp # Accumulate response parts if streamed
 
-        # If no response was extracted, provide a default
-        if not ai_response_content:
-             ai_response_content = "Sorry, I couldn't process that request."
+            # If no response was extracted, provide a default
+            if not ai_response_content:
+                ai_response_content = "Sorry, I couldn't process that request."
 
-    except Exception as e:
-        ai_response_content = f"An error occurred: {e}"
-        print(f"Error during agent execution: {e}") # Log the error
+        except Exception as e:
+            ai_response_content = f"An error occurred: {e}"
+            print(f"Error during agent execution: {e}") # Log the error
 
-    # --- Process AI Response ---
-    ai_response = {
-        "role": "assistant",
-        "content": ai_response_content
-    }
-    st.session_state.messages.append(ai_response)
+        # --- Process AI Response ---
+        ai_response = {
+            "role": "assistant",
+            "content": ai_response_content
+        }
+        st.session_state.messages.append(ai_response)
 
     # --- Clear Inputs and File State ---
     # Reset file state after processing
@@ -971,11 +991,8 @@ with st.sidebar:
         st.rerun()
 
 # --- Footer ---
-st.markdown('</div>', unsafe_allow_html=True) # Close cl3vr-input-container
-st.markdown('</div>', unsafe_allow_html=True) # Close cl3vr-main
 
 render_cl3vr_footer()
-st.markdown('</div>', unsafe_allow_html=True) # Close cl3vr-container
 
 
 # --- JavaScript Injection for Header Buttons ---
